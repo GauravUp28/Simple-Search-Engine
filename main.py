@@ -3,26 +3,24 @@ import httpx
 from typing import List
 from collections import defaultdict
 import re
+from contextlib import asynccontextmanager
 
-app = FastAPI()
-
-# Global in-memory storage
 DATA_STORE = []
 INVERTED_INDEX = defaultdict(list)
 BASE_URL = "https://november7-730026606190.europe-west1.run.app/messages/"
 
 def tokenize(text: str) -> List[str]:
-    """Helper to clean and split text into tokens."""
     return re.findall(r'\w+', text.lower())
 
 async def ingest_data():
-    """Fetches ALL pages of data and builds the search index."""
+    """Fetches all pages of data and builds the search index."""
     global DATA_STORE, INVERTED_INDEX
     
     print("Status: Starting data ingestion...")
-    DATA_STORE = [] # Clear existing data
-    INVERTED_INDEX = defaultdict(list) # Clear existing index
     
+    DATA_STORE.clear()
+    INVERTED_INDEX.clear()
+        
     async with httpx.AsyncClient() as client:
         skip = 0
         limit = 100
@@ -30,7 +28,6 @@ async def ingest_data():
         
         while more_data_available:
             try:
-                # Fetch page with pagination params
                 response = await client.get(
                     BASE_URL, 
                     params={"skip": skip, "limit": limit},
@@ -39,17 +36,14 @@ async def ingest_data():
                 response.raise_for_status()
                 data = response.json()
                 
-                # Extract items using the correct key from your screenshot
                 new_items = data.get("items", [])
                 
                 if not new_items:
                     break
                 
-                # Add to main storage
                 start_index = len(DATA_STORE)
                 DATA_STORE.extend(new_items)
                 
-                # Index these new items immediately
                 for relative_idx, record in enumerate(new_items):
                     absolute_idx = start_index + relative_idx
                     content = record.get("message", "")
@@ -57,8 +51,6 @@ async def ingest_data():
                     for token in tokens:
                         INVERTED_INDEX[token].append(absolute_idx)
                 
-                # Check if we need to fetch more
-                # If we got fewer items than the limit, we reached the end
                 if len(new_items) < limit:
                     more_data_available = False
                 else:
@@ -71,9 +63,12 @@ async def ingest_data():
 
     print(f"Status: Ingestion complete. Indexed {len(DATA_STORE)} records total.")
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await ingest_data()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/search")
 async def search(
@@ -85,7 +80,6 @@ async def search(
     if not search_tokens:
         return {"count": 0, "results": []}
     
-    # Intersection logic (AND search)
     if search_tokens[0] in INVERTED_INDEX:
         result_indices = set(INVERTED_INDEX[search_tokens[0]])
     else:
@@ -99,7 +93,6 @@ async def search(
             
     matched_indices = list(result_indices)
     
-    # Pagination for the SEARCH results
     total_matches = len(matched_indices)
     start = offset
     end = offset + limit
