@@ -2,6 +2,8 @@
 
 A high-performance, in-memory search engine built with FastAPI. This service ingests message data from an external source and exposes a fast search endpoint.
 
+**[🔴 Live Demo](https://simple-search-engine-pwy3.onrender.com/search?q=reservation)**
+
 ## Features
 
 -   **Fast Search:** Uses an in-memory inverted index to guarantee sub-100ms response times.
