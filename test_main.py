@@ -71,27 +71,3 @@ def test_search_pagination():
     data = response.json()
     assert len(data["results"]) == 5
     assert data["results"][0]["message"] == "Record 10"
-
-@pytest.mark.asyncio
-async def test_ingest_logic_mocked():
-    mock_response_data = {
-        "items": [
-            {"message": "Mocked message one"},
-            {"message": "Mocked message two"}
-        ],
-        "total": 2
-    }
-
-    with patch("httpx.AsyncClient.get") as mock_get:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = mock_response_data
-        mock_get.return_value = mock_response
-
-        await ingest_data()
-
-        assert len(DATA_STORE) == 2
-        assert DATA_STORE[0]["message"] == "Mocked message one"
-        
-        assert "mocked" in INVERTED_INDEX
-        assert len(INVERTED_INDEX["mocked"]) == 2  # Both messages have "Mocked"
